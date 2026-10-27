@@ -49,6 +49,7 @@ import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemeMode
 import com.example.ui.components.ConfirmationDialog
 import com.example.ui.components.LeaveReasonDialog
+import com.example.ui.components.ReportCardPreviewDialog
 import com.example.ui.components.StudentDetailDashboardDialog
 import com.example.ui.components.StudentFormDialog
 import com.example.ui.components.TeacherFormDialog
@@ -102,7 +103,9 @@ fun MadrasaApp(
 
     val viewingTeacherForStudents by viewModel.viewingTeacherForStudents.collectAsState()
     val viewingStudentDetails by viewModel.viewingStudentDetails.collectAsState()
+    val reportCardTargetStudent by viewModel.reportCardTargetStudent.collectAsState()
     val leaveTargetStudent by viewModel.leaveTargetStudent.collectAsState()
+    val leaveTargetTeacher by viewModel.leaveTargetTeacher.collectAsState()
     val deleteTarget by viewModel.deleteTarget.collectAsState()
 
     val allTeachers by viewModel.allTeachers.collectAsState()
@@ -118,7 +121,7 @@ fun MadrasaApp(
                 title = {
                     Text(
                         text = when (currentTab) {
-                            ScreenTab.HOME -> AppStrings.appTitle(language)
+                            ScreenTab.HOME -> "Madrasa Register (مدرسہ رجسٹر)"
                             ScreenTab.TEACHERS -> "Teachers (Qari Sahab)"
                             ScreenTab.STUDENTS -> "Students (Bachay)"
                             ScreenTab.ATTENDANCE -> "Attendance (حاضری)"
@@ -338,26 +341,55 @@ fun MadrasaApp(
 
     // Viewing Student Details & Attendance/Fees History Dashboard Dialog
     viewingStudentDetails?.let { student ->
+        val teacherDays = viewModel.getTeacherDaysPresentInMonth(student.teacherId, viewModel.getCurrentMonthKey())
         StudentDetailDashboardDialog(
             student = student,
             teacherName = viewModel.getTeacherName(student.teacherId),
+            teacherDaysPresent = teacherDays,
             attendanceHistory = viewModel.getStudentAttendanceHistory(student.id),
             onDismiss = { viewModel.closeStudentDetails() },
-            onUpdateFee = { isPaid, paidDate, amount ->
-                viewModel.updateStudentFee(student.id, isPaid, paidDate, amount)
+            onUpdateMonthlyFee = { monthKey, monthTitle, isPaid, paidDate, amount ->
+                viewModel.updateStudentMonthlyFee(student.id, monthKey, monthTitle, isPaid, paidDate, amount)
             },
+            onGenerateReportPic = { viewModel.openReportCard(student) },
             onCallPhone = { ctx, phone -> viewModel.callPhone(ctx, phone) },
             onWhatsApp = { ctx, phone -> viewModel.openWhatsApp(ctx, phone) }
         )
     }
 
-    // Leave Reason Dialog (auto-saved upon confirmation)
+    // Report Card Picture Generator & Share Dialog (can be opened anytime mid-month or month-end!)
+    reportCardTargetStudent?.let { student ->
+        val teacherDays = viewModel.getTeacherDaysPresentInMonth(student.teacherId, viewModel.getCurrentMonthKey())
+        ReportCardPreviewDialog(
+            student = student,
+            teacherName = viewModel.getTeacherName(student.teacherId),
+            attendanceHistory = viewModel.getStudentAttendanceHistory(student.id),
+            teacherDaysPresent = teacherDays,
+            onDismiss = { viewModel.closeReportCard() },
+            onShareImage = { reportData ->
+                viewModel.shareReportCard(context, reportData)
+            }
+        )
+    }
+
+    // Student Leave Reason Dialog (auto-saved upon confirmation)
     leaveTargetStudent?.let { student ->
         LeaveReasonDialog(
             studentName = student.name,
             onDismiss = { viewModel.closeLeaveReasonDialog() },
             onConfirm = { reason ->
                 viewModel.confirmLeave(reason)
+            }
+        )
+    }
+
+    // Teacher Leave Reason Dialog (auto-saved upon confirmation)
+    leaveTargetTeacher?.let { teacher ->
+        LeaveReasonDialog(
+            studentName = teacher.name,
+            onDismiss = { viewModel.closeTeacherLeaveDialog() },
+            onConfirm = { reason ->
+                viewModel.confirmTeacherLeave(reason)
             }
         )
     }

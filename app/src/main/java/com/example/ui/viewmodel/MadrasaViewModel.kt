@@ -15,6 +15,7 @@ import com.example.data.model.AttendanceStatus
 import com.example.data.model.Student
 import com.example.data.model.Teacher
 import com.example.data.repository.MadrasaRepository
+import com.example.util.ReportCardGenerator
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -32,6 +33,11 @@ enum class ScreenTab {
     HOME,       // in the Center
     ATTENDANCE,
     SETTINGS
+}
+
+enum class AttendanceViewMode {
+    STUDENTS,
+    TEACHERS
 }
 
 data class AttendanceSummary(
@@ -54,11 +60,16 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
     val allTeachers: StateFlow<List<Teacher>> = repository.teachers
     val allStudents: StateFlow<List<Student>> = repository.students
     val attendanceMap = repository.attendanceMap
+    val teacherAttendanceMap = repository.teacherAttendanceMap
     val themeMode: StateFlow<AppThemeMode> = repository.themeMode
     val language: StateFlow<AppLanguage> = repository.language
 
     private val _currentTab = MutableStateFlow(ScreenTab.HOME)
     val currentTab: StateFlow<ScreenTab> = _currentTab.asStateFlow()
+
+    // Attendance View Mode: Students vs Teachers
+    private val _attendanceViewMode = MutableStateFlow(AttendanceViewMode.STUDENTS)
+    val attendanceViewMode: StateFlow<AttendanceViewMode> = _attendanceViewMode.asStateFlow()
 
     private val _teacherSearchQuery = MutableStateFlow("")
     val teacherSearchQuery: StateFlow<String> = _teacherSearchQuery.asStateFlow()
@@ -76,6 +87,7 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
     private val dayFormat = SimpleDateFormat("EEEE", Locale.US)
     private val timeFormat = SimpleDateFormat("hh:mm a", Locale.US)
+    private val monthFormat = SimpleDateFormat("yyyy-MM", Locale.US)
 
     // Current selected attendance date (defaults to today)
     private val _selectedDate = MutableStateFlow(dateFormat.format(Date()))
@@ -101,9 +113,17 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
     private val _viewingStudentDetails = MutableStateFlow<Student?>(null)
     val viewingStudentDetails: StateFlow<Student?> = _viewingStudentDetails.asStateFlow()
 
+    // Report Card Dialog State (Student to generate picture for)
+    private val _reportCardTargetStudent = MutableStateFlow<Student?>(null)
+    val reportCardTargetStudent: StateFlow<Student?> = _reportCardTargetStudent.asStateFlow()
+
     // Leave Reason Dialog state (studentId to mark leave)
     private val _leaveTargetStudent = MutableStateFlow<Student?>(null)
     val leaveTargetStudent: StateFlow<Student?> = _leaveTargetStudent.asStateFlow()
+
+    // Teacher Leave Reason Dialog state
+    private val _leaveTargetTeacher = MutableStateFlow<Teacher?>(null)
+    val leaveTargetTeacher: StateFlow<Teacher?> = _leaveTargetTeacher.asStateFlow()
 
     private val _deleteTarget = MutableStateFlow<DeleteTarget?>(null)
     val deleteTarget: StateFlow<DeleteTarget?> = _deleteTarget.asStateFlow()
@@ -145,6 +165,10 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
 
     fun setTab(tab: ScreenTab) {
         _currentTab.value = tab
+    }
+
+    fun setAttendanceViewMode(mode: AttendanceViewMode) {
+        _attendanceViewMode.value = mode
     }
 
     fun setTeacherSearchQuery(query: String) {
@@ -196,7 +220,7 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         _deleteTarget.value = DeleteTarget.TeacherTarget(teacher, count)
     }
 
-    // Student CRUD (Simplified: Name, Father Name, Mobile Number, Optional Teacher & Fee)
+    // Student CRUD
     fun openAddStudentDialog() {
         _editingStudent.value = null
         _isStudentFormOpen.value = true
@@ -295,12 +319,52 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
 
     fun updateStudentFee(studentId: String, isPaid: Boolean, paidDate: String, amount: String) {
         repository.updateStudentFee(studentId, isPaid, paidDate, amount)
-        // Refresh detail view if currently open
         _viewingStudentDetails.value?.let {
             if (it.id == studentId) {
                 _viewingStudentDetails.value = it.copy(isFeePaid = isPaid, feePaidDate = paidDate, feeAmount = amount)
             }
         }
+    }
+
+    fun updateStudentMonthlyFee(
+        studentId: String,
+        monthKey: String,
+        monthTitle: String,
+        isPaid: Boolean,
+        paidDate: String,
+        amount: String
+    ) {
+        repository.updateStudentMonthlyFee(studentId, monthKey, monthTitle, isPaid, paidDate, amount)
+        _viewingStudentDetails.value?.let {
+            if (it.id == studentId) {
+                _viewingStudentDetails.value = repository.students.value.firstOrNull { s -> s.id == studentId }
+            }
+        }
+    }
+
+    // Report Card Picture Generator Dialog
+    fun openReportCard(student: Student) {
+        _reportCardTargetStudent.value = student
+    }
+
+    fun closeReportCard() {
+        _reportCardTargetStudent.value = null
+    }
+
+    fun shareReportCard(context: Context, data: ReportCardGenerator.ReportData) {
+        try {
+            ReportCardGenerator.shareReportCardImage(context, data)
+        } catch (e: Exception) {
+            Toast.makeText(context, "Could not share report image", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    fun getTeacherDaysPresentInMonth(teacherId: String, monthKey: String): Int {
+        return repository.getTeacherDaysPresentInMonth(teacherId, monthKey)
+    }
+
+    fun getCurrentMonthKey(): String {
+        return monthFormat.format(Date())
     }
 
     // Date & Time Handling
@@ -375,7 +439,11 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         return attendanceMap.value[date]?.get(studentId)
     }
 
-    // Instant Auto-Save Attendance
+    fun getTeacherAttendanceRecord(date: String, teacherId: String): AttendanceRecord? {
+        return teacherAttendanceMap.value[date]?.get(teacherId)
+    }
+
+    // Instant Auto-Save Student Attendance
     fun markAttendance(studentId: String, status: AttendanceStatus, leaveReason: String = "") {
         val date = _selectedDate.value
         val dayName = getDayNameForDate(date)
@@ -392,6 +460,23 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         repository.setAttendanceRecord(record)
     }
 
+    // Instant Auto-Save Teacher Attendance
+    fun markTeacherAttendance(teacherId: String, status: AttendanceStatus, leaveReason: String = "") {
+        val date = _selectedDate.value
+        val dayName = getDayNameForDate(date)
+        val time = getCurrentTimeString()
+
+        val record = AttendanceRecord(
+            studentId = teacherId,
+            date = date,
+            dayName = dayName,
+            time = time,
+            status = status,
+            leaveReason = leaveReason
+        )
+        repository.setTeacherAttendanceRecord(record)
+    }
+
     fun openLeaveReasonDialog(student: Student) {
         _leaveTargetStudent.value = student
     }
@@ -406,12 +491,34 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         closeLeaveReasonDialog()
     }
 
+    fun openTeacherLeaveDialog(teacher: Teacher) {
+        _leaveTargetTeacher.value = teacher
+    }
+
+    fun closeTeacherLeaveDialog() {
+        _leaveTargetTeacher.value = null
+    }
+
+    fun confirmTeacherLeave(reason: String) {
+        val teacher = _leaveTargetTeacher.value ?: return
+        markTeacherAttendance(teacher.id, AttendanceStatus.LEAVE, reason)
+        closeTeacherLeaveDialog()
+    }
+
     fun markAllPresent() {
         val studentIds = attendanceStudents.value.map { it.id }
         val date = _selectedDate.value
         val dayName = getDayNameForDate(date)
         val time = getCurrentTimeString()
         repository.markAllPresentForDate(date, dayName, time, studentIds)
+    }
+
+    fun markAllTeachersPresent() {
+        val teacherIds = allTeachers.value.map { it.id }
+        val date = _selectedDate.value
+        val dayName = getDayNameForDate(date)
+        val time = getCurrentTimeString()
+        repository.markAllTeachersPresentForDate(date, dayName, time, teacherIds)
     }
 
     fun getAttendanceSummary(date: String): AttendanceSummary {
@@ -423,6 +530,25 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
 
         for (student in allStudents.value) {
             when (dateMap[student.id]?.status) {
+                AttendanceStatus.PRESENT -> present++
+                AttendanceStatus.ABSENT -> absent++
+                AttendanceStatus.LEAVE -> leave++
+                else -> Unit
+            }
+        }
+        val unmarked = total - (present + absent + leave)
+        return AttendanceSummary(total, present, absent, leave, unmarked.coerceAtLeast(0))
+    }
+
+    fun getTeacherAttendanceSummary(date: String): AttendanceSummary {
+        val total = allTeachers.value.size
+        val dateMap = teacherAttendanceMap.value[date] ?: emptyMap()
+        var present = 0
+        var absent = 0
+        var leave = 0
+
+        for (teacher in allTeachers.value) {
+            when (dateMap[teacher.id]?.status) {
                 AttendanceStatus.PRESENT -> present++
                 AttendanceStatus.ABSENT -> absent++
                 AttendanceStatus.LEAVE -> leave++
@@ -501,5 +627,21 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         } catch (e: Exception) {
             Toast.makeText(context, "Could not open WhatsApp", Toast.LENGTH_SHORT).show()
         }
+    }
+
+    fun shareAppInfo(context: Context) {
+        val shareText = """
+            🕌 *Madrasa Register (مدرسہ رجسٹر)*
+            Complete offline Islamic school & madrasa management Android app.
+            Manage Students, Teachers, Daily Attendance & Monthly Fee Slips offline!
+        """.trimIndent()
+        val intent = Intent(Intent.ACTION_SEND).apply {
+            type = "text/plain"
+            putExtra(Intent.EXTRA_TEXT, shareText)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        val chooser = Intent.createChooser(intent, "Share Madrasa Register App")
+        chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        context.startActivity(chooser)
     }
 }

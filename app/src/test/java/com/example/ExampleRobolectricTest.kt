@@ -68,5 +68,48 @@ class ExampleRobolectricTest {
 
         val attendance = repository.attendanceMap.value[testDate]
         assertEquals(AttendanceStatus.PRESENT, attendance?.get(newStudent.id)?.status)
+
+        // Test Monthly Fee Tracking
+        repository.updateStudentMonthlyFee(
+            studentId = newStudent.id,
+            monthKey = "2026-10",
+            monthTitle = "October 2026",
+            isPaid = true,
+            paidDate = "2026-10-25",
+            amount = "1200"
+        )
+        val updatedStudent = repository.students.value.first()
+        val feeRecord = updatedStudent.monthlyFees["2026-10"]
+        assertTrue(feeRecord != null)
+        assertTrue(feeRecord!!.isPaid)
+        assertEquals("2026-10-25", feeRecord.paidDate)
+        assertEquals("1200", feeRecord.amount)
+
+        // Test Teacher Attendance
+        val teacherRecord = com.example.data.model.AttendanceRecord(
+            studentId = newTeacher.id,
+            date = testDate,
+            dayName = "Tuesday",
+            time = "09:30 AM",
+            status = AttendanceStatus.PRESENT
+        )
+        repository.setTeacherAttendanceRecord(teacherRecord)
+        val teacherDays = repository.getTeacherDaysPresentInMonth(newTeacher.id, "2026-10")
+        assertEquals(1, teacherDays)
+
+        // Test Report Card Generator
+        val reportData = com.example.util.ReportCardGenerator.ReportData(
+            student = updatedStudent,
+            teacherName = newTeacher.name,
+            monthTitle = "October 2026",
+            monthKey = "2026-10",
+            attendanceRecords = listOf(record),
+            teacherDaysPresent = teacherDays,
+            feeRecord = feeRecord
+        )
+        val bitmap = com.example.util.ReportCardGenerator.generateReportBitmap(reportData)
+        assertTrue(bitmap.width > 0)
+        assertTrue(bitmap.height > 0)
     }
 }
+

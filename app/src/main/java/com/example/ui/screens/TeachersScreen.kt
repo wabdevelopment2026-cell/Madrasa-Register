@@ -208,9 +208,11 @@ fun TeachersScreen(
                     modifier = Modifier.fillMaxSize()
                 ) {
                     items(teachers, key = { it.id }) { teacher ->
+                        val daysPresent = viewModel.getTeacherDaysPresentInMonth(teacher.id, viewModel.getCurrentMonthKey())
                         TeacherCard(
                             teacher = teacher,
                             studentCount = viewModel.getStudentsForTeacher(teacher.id).size,
+                            daysPresentThisMonth = daysPresent,
                             onClick = { viewModel.openTeacherStudents(teacher) },
                             onEdit = { viewModel.openEditTeacherDialog(teacher) },
                             onDelete = { viewModel.confirmDeleteTeacher(teacher) },
@@ -228,6 +230,7 @@ fun TeachersScreen(
 fun TeacherCard(
     teacher: Teacher,
     studentCount: Int,
+    daysPresentThisMonth: Int,
     onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
@@ -246,7 +249,7 @@ fun TeacherCard(
             .testTag("teacher_card_${teacher.id}")
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Header Row: Avatar, Name, Student Count
+            // Header Row: Avatar, Name, Student Count & Attendance Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 verticalAlignment = Alignment.CenterVertically
@@ -278,28 +281,44 @@ fun TeacherCard(
 
                     Spacer(modifier = Modifier.height(2.dp))
 
-                    // Student Count Badge
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        modifier = Modifier.clickable { onClick() }
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // Student Count Badge
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            modifier = Modifier.clickable { onClick() }
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.Groups,
-                                contentDescription = null,
-                                tint = MaterialTheme.colorScheme.onSecondaryContainer,
-                                modifier = Modifier.size(14.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Groups,
+                                    contentDescription = null,
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(14.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text(
+                                    text = "$studentCount Students",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+
+                        // Days Present Badge
+                        Surface(
+                            shape = RoundedCornerShape(8.dp),
+                            color = Color(0xFFDCFCE7)
+                        ) {
                             Text(
-                                text = "$studentCount Students",
-                                style = MaterialTheme.typography.labelMedium,
+                                text = "$daysPresentThisMonth Days Present",
+                                style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSecondaryContainer
+                                color = Color(0xFF16A34A),
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                             )
                         }
                     }

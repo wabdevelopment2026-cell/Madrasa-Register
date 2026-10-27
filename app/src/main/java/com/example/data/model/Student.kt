@@ -12,5 +12,6 @@ data class Student(
     val age: String = "",
     val feeAmount: String = "",
     val feePaidDate: String = "", // e.g. "2026-10-15"
-    val isFeePaid: Boolean = false
+    val isFeePaid: Boolean = false,
+    val monthlyFees: Map<String, FeeMonthRecord> = emptyMap()
 )

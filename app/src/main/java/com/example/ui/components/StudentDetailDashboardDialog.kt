@@ -5,6 +5,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -14,24 +15,26 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
 import androidx.compose.material.icons.filled.Chat
-import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.School
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.FilledTonalButton
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -55,10 +58,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceStatus
 import com.example.data.model.Student
 import java.text.SimpleDateFormat
+import java.util.Calendar
 import java.util.Date
 import java.util.Locale
 
@@ -66,23 +71,49 @@ import java.util.Locale
 fun StudentDetailDashboardDialog(
     student: Student,
     teacherName: String,
+    teacherDaysPresent: Int,
     attendanceHistory: List<AttendanceRecord>,
     onDismiss: () -> Unit,
-    onUpdateFee: (isPaid: Boolean, paidDate: String, amount: String) -> Unit,
+    onUpdateMonthlyFee: (monthKey: String, monthTitle: String, isPaid: Boolean, paidDate: String, amount: String) -> Unit,
+    onGenerateReportPic: () -> Unit,
     onCallPhone: (context: Context, phone: String) -> Unit,
     onWhatsApp: (context: Context, phone: String) -> Unit
 ) {
     val context = LocalContext.current
+
+    // Month selector for fee tracking
+    val monthOptions = remember {
+        val list = mutableListOf<Pair<String, String>>()
+        val cal = Calendar.getInstance()
+        val keyFormat = SimpleDateFormat("yyyy-MM", Locale.US)
+        val titleFormat = SimpleDateFormat("MMMM yyyy", Locale.US)
+        for (i in 0..5) {
+            val d = cal.time
+            list.add(Pair(keyFormat.format(d), titleFormat.format(d)))
+            cal.add(Calendar.MONTH, -1)
+        }
+        list
+    }
+
+    var selectedMonthIndex by remember { mutableStateOf(0) }
+    val currentMonthKey = monthOptions[selectedMonthIndex].first
+    val currentMonthTitle = monthOptions[selectedMonthIndex].second
+
+    // Fee record for current selected month
+    val monthFeeRecord = student.monthlyFees[currentMonthKey]
+    val isFeePaid = monthFeeRecord?.isPaid ?: (if (selectedMonthIndex == 0) student.isFeePaid else false)
+    val feePaidDate = monthFeeRecord?.paidDate ?: (if (selectedMonthIndex == 0) student.feePaidDate else "")
+    val feeAmount = monthFeeRecord?.amount?.ifBlank { student.feeAmount } ?: student.feeAmount
+
     var isEditingFee by remember { mutableStateOf(false) }
-    var feeAmountInput by remember { mutableStateOf(student.feeAmount.ifBlank { "1000" }) }
+    var feeAmountInput by remember { mutableStateOf(feeAmount.ifBlank { "1000" }) }
     var feePaidDateInput by remember {
         mutableStateOf(
-            student.feePaidDate.ifBlank {
+            feePaidDate.ifBlank {
                 SimpleDateFormat("yyyy-MM-dd", Locale.US).format(Date())
             }
         )
     }
-    var feePaidState by remember { mutableStateOf(student.isFeePaid) }
 
     val totalDays = attendanceHistory.size
     val presentDays = attendanceHistory.count { it.status == AttendanceStatus.PRESENT }
@@ -90,19 +121,23 @@ fun StudentDetailDashboardDialog(
     val absentDays = attendanceHistory.count { it.status == AttendanceStatus.ABSENT }
     val attendanceRate = if (totalDays > 0) (presentDays * 100) / totalDays else 0
 
-    Dialog(onDismissRequest = onDismiss) {
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
         Surface(
-            shape = RoundedCornerShape(20.dp),
+            shape = RoundedCornerShape(22.dp),
             color = MaterialTheme.colorScheme.surface,
             tonalElevation = 6.dp,
             modifier = Modifier
-                .fillMaxWidth()
+                .fillMaxWidth(0.95f)
+                .heightIn(max = 720.dp)
                 .padding(vertical = 12.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(20.dp)
+                    .padding(18.dp)
             ) {
                 // Header Row
                 Row(
@@ -136,7 +171,7 @@ fun StudentDetailDashboardDialog(
                                 fontWeight = FontWeight.Bold
                             )
                             Text(
-                                text = "Father: ${student.fatherName}",
+                                text = "Walid: ${student.fatherName} • $teacherName",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -148,24 +183,27 @@ fun StudentDetailDashboardDialog(
                     }
                 }
 
-                // Phone quick actions
-                if (student.phone.isNotBlank()) {
-                    Spacer(modifier = Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Action Row: Call, WhatsApp, and "Generate Report Pic" Button
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    if (student.phone.isNotBlank()) {
                         FilledTonalButton(
                             onClick = { onCallPhone(context, student.phone) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(16.dp))
                             Spacer(modifier = Modifier.width(4.dp))
-                            Text("Call Father", fontSize = 12.sp)
+                            Text("Call", fontSize = 12.sp)
                         }
 
                         OutlinedButton(
                             onClick = { onWhatsApp(context, student.phone) },
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
                             modifier = Modifier.weight(1f)
                         ) {
                             Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
@@ -173,17 +211,31 @@ fun StudentDetailDashboardDialog(
                             Text("WhatsApp", fontSize = 12.sp)
                         }
                     }
+
+                    // Button to create Picture anytime!
+                    Button(
+                        onClick = onGenerateReportPic,
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                        modifier = Modifier
+                            .weight(1.3f)
+                            .testTag("dialog_generate_report_pic_button")
+                    ) {
+                        Icon(Icons.Default.Image, contentDescription = null, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        Text("Report Pic (تصویر)", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
                 HorizontalDivider()
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Fees Status Card
+                // Monthly Fees Tracking (Kis month ki di thi, kab di thi)
                 Card(
                     shape = RoundedCornerShape(14.dp),
                     colors = CardDefaults.cardColors(
-                        containerColor = if (student.isFeePaid) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                        containerColor = if (isFeePaid) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
                     ),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -195,24 +247,31 @@ fun StudentDetailDashboardDialog(
                         ) {
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Icon(
-                                    imageVector = if (student.isFeePaid) Icons.Default.Paid else Icons.Default.Payments,
+                                    imageVector = if (isFeePaid) Icons.Default.Paid else Icons.Default.Payments,
                                     contentDescription = null,
-                                    tint = if (student.isFeePaid) Color(0xFF16A34A) else Color(0xFFDC2626),
+                                    tint = if (isFeePaid) Color(0xFF16A34A) else Color(0xFFDC2626),
                                     modifier = Modifier.size(24.dp)
                                 )
                                 Spacer(modifier = Modifier.width(8.dp))
                                 Column {
                                     Text(
-                                        text = if (student.isFeePaid) "Fees: Paid (فیس ادا شدہ)" else "Fees: Pending (فیس واجب الادا)",
+                                        text = "$currentMonthTitle Fees: ${if (isFeePaid) "PAID (ادا شدہ)" else "PENDING (واجب الادا)"}",
                                         fontWeight = FontWeight.Bold,
                                         style = MaterialTheme.typography.titleSmall,
-                                        color = if (student.isFeePaid) Color(0xFF16A34A) else Color(0xFFDC2626)
+                                        color = if (isFeePaid) Color(0xFF16A34A) else Color(0xFFDC2626)
                                     )
-                                    if (student.isFeePaid && student.feePaidDate.isNotBlank()) {
+                                    if (isFeePaid && feePaidDate.isNotBlank()) {
                                         Text(
-                                            text = "Paid on: ${student.feePaidDate} ${if (student.feeAmount.isNotBlank()) "(${student.feeAmount})" else ""}",
+                                            text = "Kab di thi: $feePaidDate (Rs. ${feeAmount.ifBlank { "1000" }})",
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF15803D)
+                                            color = Color(0xFF15803D),
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    } else {
+                                        Text(
+                                            text = "Month: $currentMonthTitle • Rs. ${feeAmount.ifBlank { "1000" }} due",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFFB91C1C)
                                         )
                                     }
                                 }
@@ -220,9 +279,25 @@ fun StudentDetailDashboardDialog(
 
                             FilledTonalButton(
                                 onClick = { isEditingFee = !isEditingFee },
-                                contentPadding = androidx.compose.foundation.layout.PaddingValues(horizontal = 8.dp, vertical = 2.dp)
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 2.dp)
                             ) {
                                 Text(if (isEditingFee) "Done" else "Update", fontSize = 11.sp)
+                            }
+                        }
+
+                        // Month selection chips
+                        Spacer(modifier = Modifier.height(8.dp))
+                        LazyRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            items(monthOptions.indices.toList()) { idx ->
+                                val pair = monthOptions[idx]
+                                FilterChip(
+                                    selected = idx == selectedMonthIndex,
+                                    onClick = { selectedMonthIndex = idx },
+                                    label = { Text(pair.second, fontSize = 11.sp) }
+                                )
                             }
                         }
 
@@ -235,14 +310,14 @@ fun StudentDetailDashboardDialog(
                                 OutlinedTextField(
                                     value = feePaidDateInput,
                                     onValueChange = { feePaidDateInput = it },
-                                    label = { Text("Date (YYYY-MM-DD)") },
+                                    label = { Text("Payment Date (Kab di)") },
                                     modifier = Modifier.weight(1.2f),
                                     singleLine = true
                                 )
                                 OutlinedTextField(
                                     value = feeAmountInput,
                                     onValueChange = { feeAmountInput = it },
-                                    label = { Text("Amount") },
+                                    label = { Text("Amount (Rs)") },
                                     modifier = Modifier.weight(1f),
                                     singleLine = true
                                 )
@@ -254,32 +329,80 @@ fun StudentDetailDashboardDialog(
                             ) {
                                 Button(
                                     onClick = {
-                                        onUpdateFee(true, feePaidDateInput, feeAmountInput)
+                                        onUpdateMonthlyFee(
+                                            currentMonthKey,
+                                            currentMonthTitle,
+                                            true,
+                                            feePaidDateInput,
+                                            feeAmountInput
+                                        )
                                         isEditingFee = false
                                     },
-                                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
+                                    colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF16A34A)),
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Mark Paid", fontSize = 12.sp)
+                                    Text("Mark Paid (ادا ہو گئی)", fontSize = 12.sp)
                                 }
 
                                 OutlinedButton(
                                     onClick = {
-                                        onUpdateFee(false, "", "")
+                                        onUpdateMonthlyFee(
+                                            currentMonthKey,
+                                            currentMonthTitle,
+                                            false,
+                                            "",
+                                            feeAmountInput
+                                        )
                                         isEditingFee = false
                                     },
                                     modifier = Modifier.weight(1f)
                                 ) {
-                                    Text("Mark Unpaid", fontSize = 12.sp)
+                                    Text("Mark Pending", fontSize = 12.sp)
                                 }
                             }
                         }
                     }
                 }
 
-                Spacer(modifier = Modifier.height(14.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Attendance Rate Summary Row
+                // Teacher Attendance Card
+                Surface(
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.5f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(
+                                imageVector = Icons.Default.School,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(
+                                text = "Teacher (قاری صاحب): $teacherName",
+                                style = MaterialTheme.typography.bodySmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "$teacherDaysPresent Days Present",
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = MaterialTheme.colorScheme.secondary
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                // Daily Attendance History Header & Rate
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -300,7 +423,7 @@ fun StudentDetailDashboardDialog(
 
                 Spacer(modifier = Modifier.height(6.dp))
 
-                // Stats summary pills
+                // Attendance stats summary
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.spacedBy(6.dp)
@@ -348,14 +471,14 @@ fun StudentDetailDashboardDialog(
                     }
                 }
 
-                Spacer(modifier = Modifier.height(10.dp))
+                Spacer(modifier = Modifier.height(8.dp))
 
                 // Timeline List
                 if (attendanceHistory.isEmpty()) {
                     Box(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 24.dp),
+                            .padding(vertical = 20.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
@@ -368,7 +491,7 @@ fun StudentDetailDashboardDialog(
                     LazyColumn(
                         modifier = Modifier
                             .fillMaxWidth()
-                            .heightIn(max = 240.dp),
+                            .weight(1f),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
                         items(attendanceHistory, key = { "${it.date}_${it.studentId}" }) { record ->
@@ -401,7 +524,7 @@ fun StudentDetailDashboardDialog(
                                         }
                                         if (record.status == AttendanceStatus.LEAVE && record.leaveReason.isNotBlank()) {
                                             Text(
-                                                text = "Wajah (Reason): ${record.leaveReason}",
+                                                text = "Wajah: ${record.leaveReason}",
                                                 style = MaterialTheme.typography.bodySmall,
                                                 fontWeight = FontWeight.SemiBold,
                                                 color = Color(0xFFD97706)

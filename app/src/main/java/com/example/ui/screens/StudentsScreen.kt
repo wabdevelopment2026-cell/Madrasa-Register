@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
@@ -214,6 +215,7 @@ fun StudentsScreen(
                             student = student,
                             teacherName = viewModel.getTeacherName(student.teacherId),
                             onClick = { viewModel.openStudentDetails(student) },
+                            onGeneratePic = { viewModel.openReportCard(student) },
                             onEdit = { viewModel.openEditStudentDialog(student) },
                             onDelete = { viewModel.confirmDeleteStudent(student) },
                             onCall = { viewModel.callPhone(context, student.phone) },
@@ -231,6 +233,7 @@ fun StudentCard(
     student: Student,
     teacherName: String,
     onClick: () -> Unit,
+    onGeneratePic: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onCall: () -> Unit,
@@ -367,32 +370,41 @@ fun StudentCard(
 
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Row: Call, WhatsApp, View History Dashboard, Edit, Delete
+            // Action Row: Pic, Call, WhatsApp, View History Dashboard, Edit, Delete
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    FilledTonalButton(
+                        onClick = onGeneratePic,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Image, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Pic Slip", style = MaterialTheme.typography.labelSmall, fontWeight = FontWeight.Bold)
+                    }
+
                     if (student.phone.isNotBlank()) {
                         FilledTonalButton(
                             onClick = onCall,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("call_student_${student.id}")
                         ) {
-                            Icon(imageVector = Icons.Default.Call, contentDescription = "Call", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("Call", style = MaterialTheme.typography.labelMedium)
+                            Icon(imageVector = Icons.Default.Call, contentDescription = "Call", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("Call", style = MaterialTheme.typography.labelSmall)
                         }
 
                         OutlinedButton(
                             onClick = onWhatsApp,
-                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp),
+                            contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp),
                             modifier = Modifier.testTag("whatsapp_student_${student.id}")
                         ) {
-                            Icon(imageVector = Icons.Default.Chat, contentDescription = "WhatsApp", modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("WhatsApp", style = MaterialTheme.typography.labelMedium)
+                            Icon(imageVector = Icons.Default.Chat, contentDescription = "WhatsApp", modifier = Modifier.size(14.dp))
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Text("WA", style = MaterialTheme.typography.labelSmall)
                         }
                     }
 
@@ -401,7 +413,7 @@ fun StudentCard(
                         contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
                     ) {
                         Icon(imageVector = Icons.Default.Timeline, contentDescription = null, modifier = Modifier.size(14.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
+                        Spacer(modifier = Modifier.width(2.dp))
                         Text("History", style = MaterialTheme.typography.labelSmall)
                     }
                 }
