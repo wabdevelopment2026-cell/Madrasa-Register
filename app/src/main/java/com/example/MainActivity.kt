@@ -9,7 +9,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
@@ -21,7 +20,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Settings
-import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -50,6 +48,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemeMode
 import com.example.ui.components.ConfirmationDialog
+import com.example.ui.components.LeaveReasonDialog
+import com.example.ui.components.StudentDetailDashboardDialog
 import com.example.ui.components.StudentFormDialog
 import com.example.ui.components.TeacherFormDialog
 import com.example.ui.components.TeacherStudentsDialog
@@ -101,11 +101,13 @@ fun MadrasaApp(
     val editingStudent by viewModel.editingStudent.collectAsState()
 
     val viewingTeacherForStudents by viewModel.viewingTeacherForStudents.collectAsState()
+    val viewingStudentDetails by viewModel.viewingStudentDetails.collectAsState()
+    val leaveTargetStudent by viewModel.leaveTargetStudent.collectAsState()
     val deleteTarget by viewModel.deleteTarget.collectAsState()
 
     val allTeachers by viewModel.allTeachers.collectAsState()
 
-    // Handle Android back button
+    // Handle Android system back button
     BackHandler(enabled = currentTab != ScreenTab.HOME) {
         viewModel.setTab(ScreenTab.HOME)
     }
@@ -250,7 +252,7 @@ fun MadrasaApp(
                     modifier = Modifier.testTag("nav_item_home_center")
                 )
 
-                // 4. Attendance (Rozana Hazri)
+                // 4. Attendance
                 NavigationBarItem(
                     selected = currentTab == ScreenTab.ATTENDANCE,
                     onClick = { viewModel.setTab(ScreenTab.ATTENDANCE) },
@@ -269,7 +271,7 @@ fun MadrasaApp(
                     modifier = Modifier.testTag("nav_item_attendance")
                 )
 
-                // 5. Settings (Theme & Language)
+                // 5. Settings
                 NavigationBarItem(
                     selected = currentTab == ScreenTab.SETTINGS,
                     onClick = { viewModel.setTab(ScreenTab.SETTINGS) },
@@ -311,14 +313,14 @@ fun MadrasaApp(
         )
     }
 
-    // Student Form Dialog (Add / Edit)
+    // Student Form Dialog (Add / Edit - Simplified: Name, Father Name, Mobile Number, Fee)
     if (isStudentFormOpen) {
         StudentFormDialog(
             initialStudent = editingStudent,
             teachersList = allTeachers,
             onDismiss = { viewModel.closeStudentForm() },
-            onSave = { name, fatherName, teacherId, phone, address, age ->
-                viewModel.saveStudent(name, fatherName, teacherId, phone, address, age)
+            onSave = { name, fatherName, phone, teacherId, feeAmount ->
+                viewModel.saveStudent(name, fatherName, phone, teacherId, feeAmount)
             }
         )
     }
@@ -331,6 +333,32 @@ fun MadrasaApp(
             onDismiss = { viewModel.closeTeacherStudents() },
             onCallPhone = { ctx, phone -> viewModel.callPhone(ctx, phone) },
             onWhatsApp = { ctx, phone -> viewModel.openWhatsApp(ctx, phone) }
+        )
+    }
+
+    // Viewing Student Details & Attendance/Fees History Dashboard Dialog
+    viewingStudentDetails?.let { student ->
+        StudentDetailDashboardDialog(
+            student = student,
+            teacherName = viewModel.getTeacherName(student.teacherId),
+            attendanceHistory = viewModel.getStudentAttendanceHistory(student.id),
+            onDismiss = { viewModel.closeStudentDetails() },
+            onUpdateFee = { isPaid, paidDate, amount ->
+                viewModel.updateStudentFee(student.id, isPaid, paidDate, amount)
+            },
+            onCallPhone = { ctx, phone -> viewModel.callPhone(ctx, phone) },
+            onWhatsApp = { ctx, phone -> viewModel.openWhatsApp(ctx, phone) }
+        )
+    }
+
+    // Leave Reason Dialog (auto-saved upon confirmation)
+    leaveTargetStudent?.let { student ->
+        LeaveReasonDialog(
+            studentName = student.name,
+            onDismiss = { viewModel.closeLeaveReasonDialog() },
+            onConfirm = { reason ->
+                viewModel.confirmLeave(reason)
+            }
         )
     }
 

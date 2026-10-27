@@ -25,11 +25,13 @@ import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.Edit
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Paid
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Timeline
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -54,6 +56,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.example.data.model.Student
 import com.example.ui.viewmodel.MadrasaViewModel
 import com.example.util.AppStrings
@@ -210,6 +213,7 @@ fun StudentsScreen(
                         StudentCard(
                             student = student,
                             teacherName = viewModel.getTeacherName(student.teacherId),
+                            onClick = { viewModel.openStudentDetails(student) },
                             onEdit = { viewModel.openEditStudentDialog(student) },
                             onDelete = { viewModel.confirmDeleteStudent(student) },
                             onCall = { viewModel.callPhone(context, student.phone) },
@@ -226,12 +230,14 @@ fun StudentsScreen(
 fun StudentCard(
     student: Student,
     teacherName: String,
+    onClick: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onCall: () -> Unit,
     onWhatsApp: () -> Unit
 ) {
     ElevatedCard(
+        onClick = onClick,
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.elevatedCardColors(
             containerColor = MaterialTheme.colorScheme.surface
@@ -242,13 +248,16 @@ fun StudentCard(
             .testTag("student_card_${student.id}")
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
-            // Top Row: Student Name & Age Badge
+            // Top Row: Student Name & Fee Status Badge
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
                     Box(
                         contentAlignment = Alignment.Center,
                         modifier = Modifier
@@ -272,105 +281,93 @@ fun StudentCard(
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         Text(
-                            text = "Father: ${student.fatherName}",
+                            text = "Walid: ${student.fatherName}",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     }
                 }
 
-                if (student.age.isNotBlank()) {
-                    Surface(
-                        shape = RoundedCornerShape(8.dp),
-                        color = MaterialTheme.colorScheme.secondaryContainer
+                // Fee Status Badge
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = if (student.isFeePaid) Color(0xFFDCFCE7) else Color(0xFFFEE2E2)
+                ) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
                     ) {
+                        Icon(
+                            imageVector = if (student.isFeePaid) Icons.Default.Paid else Icons.Default.Payments,
+                            contentDescription = null,
+                            tint = if (student.isFeePaid) Color(0xFF16A34A) else Color(0xFFDC2626),
+                            modifier = Modifier.size(12.dp)
+                        )
+                        Spacer(modifier = Modifier.width(4.dp))
                         Text(
-                            text = "${student.age} Yrs",
+                            text = if (student.isFeePaid) "Fees: Paid" else "Fees: Due",
                             style = MaterialTheme.typography.labelSmall,
                             fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            color = if (student.isFeePaid) Color(0xFF16A34A) else Color(0xFFDC2626)
                         )
                     }
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
-
-            // Assigned Teacher Badge
-            Surface(
-                shape = RoundedCornerShape(8.dp),
-                color = MaterialTheme.colorScheme.surfaceVariant,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.School,
-                        contentDescription = "Teacher",
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(16.dp)
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = "Teacher: $teacherName",
-                        style = MaterialTheme.typography.bodySmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                }
-            }
-
-            // Phone and Address details
-            if (student.phone.isNotBlank() || student.address.isNotBlank()) {
+            // Teacher info badge
+            if (teacherName != "Unassigned") {
                 Spacer(modifier = Modifier.height(10.dp))
-
-                if (student.phone.isNotBlank()) {
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = MaterialTheme.colorScheme.surfaceVariant,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 2.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                     ) {
                         Icon(
-                            imageVector = Icons.Default.Phone,
-                            contentDescription = "Phone",
+                            imageVector = Icons.Default.School,
+                            contentDescription = "Teacher",
                             tint = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.size(16.dp)
                         )
                         Spacer(modifier = Modifier.width(6.dp))
                         Text(
-                            text = "Phone: ${student.phone}",
+                            text = "Teacher: $teacherName",
                             style = MaterialTheme.typography.bodySmall,
-                            fontWeight = FontWeight.Medium
-                        )
-                    }
-                }
-
-                if (student.address.isNotBlank()) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(vertical = 2.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Home,
-                            contentDescription = "Address",
-                            tint = MaterialTheme.colorScheme.outline,
-                            modifier = Modifier.size(16.dp)
-                        )
-                        Spacer(modifier = Modifier.width(6.dp))
-                        Text(
-                            text = student.address,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            fontWeight = FontWeight.SemiBold,
+                            color = MaterialTheme.colorScheme.primary
                         )
                     }
                 }
             }
 
+            // Phone details
+            if (student.phone.isNotBlank()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(vertical = 2.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Phone,
+                        contentDescription = "Phone",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "Phone: ${student.phone}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
             Spacer(modifier = Modifier.height(12.dp))
 
-            // Action Row: Call, WhatsApp, Edit, Delete
+            // Action Row: Call, WhatsApp, View History Dashboard, Edit, Delete
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -397,6 +394,15 @@ fun StudentCard(
                             Spacer(modifier = Modifier.width(4.dp))
                             Text("WhatsApp", style = MaterialTheme.typography.labelMedium)
                         }
+                    }
+
+                    FilledTonalButton(
+                        onClick = onClick,
+                        contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                    ) {
+                        Icon(imageVector = Icons.Default.Timeline, contentDescription = null, modifier = Modifier.size(14.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("History", style = MaterialTheme.typography.labelSmall)
                     }
                 }
 

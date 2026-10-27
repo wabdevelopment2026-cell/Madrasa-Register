@@ -1,6 +1,7 @@
 package com.example.ui.viewmodel
 
 import android.app.Application
+import android.app.DatePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -9,6 +10,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.model.AppLanguage
 import com.example.data.model.AppThemeMode
+import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceStatus
 import com.example.data.model.Student
 import com.example.data.model.Teacher
@@ -27,7 +29,7 @@ import java.util.Locale
 enum class ScreenTab {
     TEACHERS,
     STUDENTS,
-    HOME,       // In the Center!
+    HOME,       // in the Center
     ATTENDANCE,
     SETTINGS
 }
@@ -70,46 +72,14 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
     private val _attendanceTeacherFilter = MutableStateFlow<String?>(null)
     val attendanceTeacherFilter: StateFlow<String?> = _attendanceTeacherFilter.asStateFlow()
 
-    // Date for attendance (YYYY-MM-DD)
+    // Date & Time formatting
     private val dateFormat = SimpleDateFormat("yyyy-MM-dd", Locale.US)
+    private val dayFormat = SimpleDateFormat("EEEE", Locale.US)
+    private val timeFormat = SimpleDateFormat("hh:mm a", Locale.US)
+
+    // Current selected attendance date (defaults to today)
     private val _selectedDate = MutableStateFlow(dateFormat.format(Date()))
     val selectedDate: StateFlow<String> = _selectedDate.asStateFlow()
-
-    // Filtered teachers
-    val filteredTeachers: StateFlow<List<Teacher>> = combine(allTeachers, _teacherSearchQuery) { teachers, query ->
-        if (query.isBlank()) teachers
-        else teachers.filter {
-            it.name.contains(query, ignoreCase = true) ||
-            it.phone.contains(query, ignoreCase = true) ||
-            it.address.contains(query, ignoreCase = true)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Filtered students
-    val filteredStudents: StateFlow<List<Student>> = combine(allStudents, _studentSearchQuery) { students, query ->
-        if (query.isBlank()) students
-        else students.filter {
-            it.name.contains(query, ignoreCase = true) ||
-            it.fatherName.contains(query, ignoreCase = true) ||
-            it.phone.contains(query, ignoreCase = true) ||
-            it.address.contains(query, ignoreCase = true)
-        }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
-
-    // Filtered students for Attendance screen
-    val attendanceStudents: StateFlow<List<Student>> = combine(allStudents, _attendanceSearchQuery, _attendanceTeacherFilter) { students, query, teacherId ->
-        var list = students
-        if (!teacherId.isNullOrBlank()) {
-            list = list.filter { it.teacherId == teacherId }
-        }
-        if (query.isNotBlank()) {
-            list = list.filter {
-                it.name.contains(query, ignoreCase = true) ||
-                it.fatherName.contains(query, ignoreCase = true)
-            }
-        }
-        list
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     // Dialog States
     private val _isTeacherFormOpen = MutableStateFlow(false)
@@ -127,8 +97,51 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
     private val _viewingTeacherForStudents = MutableStateFlow<Teacher?>(null)
     val viewingTeacherForStudents: StateFlow<Teacher?> = _viewingTeacherForStudents.asStateFlow()
 
+    // Student Detail Dashboard Dialog
+    private val _viewingStudentDetails = MutableStateFlow<Student?>(null)
+    val viewingStudentDetails: StateFlow<Student?> = _viewingStudentDetails.asStateFlow()
+
+    // Leave Reason Dialog state (studentId to mark leave)
+    private val _leaveTargetStudent = MutableStateFlow<Student?>(null)
+    val leaveTargetStudent: StateFlow<Student?> = _leaveTargetStudent.asStateFlow()
+
     private val _deleteTarget = MutableStateFlow<DeleteTarget?>(null)
     val deleteTarget: StateFlow<DeleteTarget?> = _deleteTarget.asStateFlow()
+
+    // Filtered teachers
+    val filteredTeachers: StateFlow<List<Teacher>> = combine(allTeachers, _teacherSearchQuery) { teachers, query ->
+        if (query.isBlank()) teachers
+        else teachers.filter {
+            it.name.contains(query, ignoreCase = true) ||
+            it.phone.contains(query, ignoreCase = true) ||
+            it.address.contains(query, ignoreCase = true)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Filtered students
+    val filteredStudents: StateFlow<List<Student>> = combine(allStudents, _studentSearchQuery) { students, query ->
+        if (query.isBlank()) students
+        else students.filter {
+            it.name.contains(query, ignoreCase = true) ||
+            it.fatherName.contains(query, ignoreCase = true) ||
+            it.phone.contains(query, ignoreCase = true)
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    // Attendance students
+    val attendanceStudents: StateFlow<List<Student>> = combine(allStudents, _attendanceSearchQuery, _attendanceTeacherFilter) { students, query, teacherId ->
+        var list = students
+        if (!teacherId.isNullOrBlank()) {
+            list = list.filter { it.teacherId == teacherId }
+        }
+        if (query.isNotBlank()) {
+            list = list.filter {
+                it.name.contains(query, ignoreCase = true) ||
+                it.fatherName.contains(query, ignoreCase = true)
+            }
+        }
+        list
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     fun setTab(tab: ScreenTab) {
         _currentTab.value = tab
@@ -183,7 +196,7 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         _deleteTarget.value = DeleteTarget.TeacherTarget(teacher, count)
     }
 
-    // Student CRUD
+    // Student CRUD (Simplified: Name, Father Name, Mobile Number, Optional Teacher & Fee)
     fun openAddStudentDialog() {
         _editingStudent.value = null
         _isStudentFormOpen.value = true
@@ -202,30 +215,27 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
     fun saveStudent(
         name: String,
         fatherName: String,
-        teacherId: String,
         phone: String,
-        address: String,
-        age: String
+        teacherId: String,
+        feeAmount: String
     ) {
         val current = _editingStudent.value
         if (current == null) {
             val newStudent = Student(
                 name = name.trim(),
                 fatherName = fatherName.trim(),
-                teacherId = teacherId,
                 phone = phone.trim(),
-                address = address.trim(),
-                age = age.trim()
+                teacherId = teacherId,
+                feeAmount = feeAmount.trim()
             )
             repository.addStudent(newStudent)
         } else {
             val updated = current.copy(
                 name = name.trim(),
                 fatherName = fatherName.trim(),
-                teacherId = teacherId,
                 phone = phone.trim(),
-                address = address.trim(),
-                age = age.trim()
+                teacherId = teacherId,
+                feeAmount = feeAmount.trim()
             )
             repository.updateStudent(updated)
         }
@@ -253,7 +263,7 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         _deleteTarget.value = null
     }
 
-    // Teacher's students view dialog
+    // Teacher's students dialog
     fun openTeacherStudents(teacher: Teacher) {
         _viewingTeacherForStudents.value = teacher
     }
@@ -270,9 +280,69 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         return allTeachers.value.firstOrNull { it.id == teacherId }?.name ?: "Unassigned"
     }
 
-    // Attendance Operations
+    // Student Details & History Dashboard
+    fun openStudentDetails(student: Student) {
+        _viewingStudentDetails.value = student
+    }
+
+    fun closeStudentDetails() {
+        _viewingStudentDetails.value = null
+    }
+
+    fun getStudentAttendanceHistory(studentId: String): List<AttendanceRecord> {
+        return repository.getStudentAttendanceHistory(studentId)
+    }
+
+    fun updateStudentFee(studentId: String, isPaid: Boolean, paidDate: String, amount: String) {
+        repository.updateStudentFee(studentId, isPaid, paidDate, amount)
+        // Refresh detail view if currently open
+        _viewingStudentDetails.value?.let {
+            if (it.id == studentId) {
+                _viewingStudentDetails.value = it.copy(isFeePaid = isPaid, feePaidDate = paidDate, feeAmount = amount)
+            }
+        }
+    }
+
+    // Date & Time Handling
     fun setAttendanceDate(date: String) {
         _selectedDate.value = date
+    }
+
+    fun getDayNameForDate(dateStr: String): String {
+        return try {
+            val d = dateFormat.parse(dateStr)
+            dayFormat.format(d ?: Date())
+        } catch (e: Exception) {
+            "Today"
+        }
+    }
+
+    fun getCurrentTimeString(): String {
+        return timeFormat.format(Date())
+    }
+
+    fun openDatePicker(context: Context) {
+        val cal = Calendar.getInstance()
+        try {
+            dateFormat.parse(_selectedDate.value)?.let { cal.time = it }
+        } catch (e: Exception) {
+            // fallback
+        }
+
+        DatePickerDialog(
+            context,
+            { _, year, month, dayOfMonth ->
+                val chosenCal = Calendar.getInstance().apply {
+                    set(Calendar.YEAR, year)
+                    set(Calendar.MONTH, month)
+                    set(Calendar.DAY_OF_MONTH, dayOfMonth)
+                }
+                _selectedDate.value = dateFormat.format(chosenCal.time)
+            },
+            cal.get(Calendar.YEAR),
+            cal.get(Calendar.MONTH),
+            cal.get(Calendar.DAY_OF_MONTH)
+        ).show()
     }
 
     fun goToPreviousDay() {
@@ -301,17 +371,47 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         _selectedDate.value = dateFormat.format(Date())
     }
 
-    fun getStudentAttendanceStatus(date: String, studentId: String): AttendanceStatus {
-        return attendanceMap.value[date]?.get(studentId) ?: AttendanceStatus.UNMARKED
+    fun getStudentAttendanceRecord(date: String, studentId: String): AttendanceRecord? {
+        return attendanceMap.value[date]?.get(studentId)
     }
 
-    fun markAttendance(studentId: String, status: AttendanceStatus) {
-        repository.setStudentAttendance(_selectedDate.value, studentId, status)
+    // Instant Auto-Save Attendance
+    fun markAttendance(studentId: String, status: AttendanceStatus, leaveReason: String = "") {
+        val date = _selectedDate.value
+        val dayName = getDayNameForDate(date)
+        val time = getCurrentTimeString()
+
+        val record = AttendanceRecord(
+            studentId = studentId,
+            date = date,
+            dayName = dayName,
+            time = time,
+            status = status,
+            leaveReason = leaveReason
+        )
+        repository.setAttendanceRecord(record)
+    }
+
+    fun openLeaveReasonDialog(student: Student) {
+        _leaveTargetStudent.value = student
+    }
+
+    fun closeLeaveReasonDialog() {
+        _leaveTargetStudent.value = null
+    }
+
+    fun confirmLeave(reason: String) {
+        val student = _leaveTargetStudent.value ?: return
+        markAttendance(student.id, AttendanceStatus.LEAVE, reason)
+        closeLeaveReasonDialog()
     }
 
     fun markAllPresent() {
         val studentIds = attendanceStudents.value.map { it.id }
-        repository.markAllPresentForDate(_selectedDate.value, studentIds)
+        val date = _selectedDate.value
+        val dayName = getDayNameForDate(date)
+        val time = getCurrentTimeString()
+        repository.markAllPresentForDate(date, dayName, time, studentIds)
     }
 
     fun getAttendanceSummary(date: String): AttendanceSummary {
@@ -322,7 +422,7 @@ class MadrasaViewModel(application: Application) : AndroidViewModel(application)
         var leave = 0
 
         for (student in allStudents.value) {
-            when (dateMap[student.id]) {
+            when (dateMap[student.id]?.status) {
                 AttendanceStatus.PRESENT -> present++
                 AttendanceStatus.ABSENT -> absent++
                 AttendanceStatus.LEAVE -> leave++

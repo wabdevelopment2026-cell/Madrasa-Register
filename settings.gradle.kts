@@ -22,6 +22,6 @@ dependencyResolutionManagement {
   }
 }
 
-rootProject.name = "Madrasa"
+rootProject.name = "Madrasa Register"
 
 include(":app")

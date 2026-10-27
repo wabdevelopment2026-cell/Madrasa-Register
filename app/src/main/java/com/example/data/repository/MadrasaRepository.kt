@@ -15,7 +15,7 @@ import org.json.JSONObject
 
 class MadrasaRepository(private val context: Context) {
 
-    private val prefs = context.getSharedPreferences("madrasa_storage_v2", Context.MODE_PRIVATE)
+    private val prefs = context.getSharedPreferences("madrasa_storage_v3", Context.MODE_PRIVATE)
 
     private val _teachers = MutableStateFlow<List<Teacher>>(emptyList())
     val teachers: StateFlow<List<Teacher>> = _teachers.asStateFlow()
@@ -23,9 +23,9 @@ class MadrasaRepository(private val context: Context) {
     private val _students = MutableStateFlow<List<Student>>(emptyList())
     val students: StateFlow<List<Student>> = _students.asStateFlow()
 
-    // Date (YYYY-MM-DD) -> (StudentId -> AttendanceStatus)
-    private val _attendanceMap = MutableStateFlow<Map<String, Map<String, AttendanceStatus>>>(emptyMap())
-    val attendanceMap: StateFlow<Map<String, Map<String, AttendanceStatus>>> = _attendanceMap.asStateFlow()
+    // Date (YYYY-MM-DD) -> (StudentId -> AttendanceRecord)
+    private val _attendanceMap = MutableStateFlow<Map<String, Map<String, AttendanceRecord>>>(emptyMap())
+    val attendanceMap: StateFlow<Map<String, Map<String, AttendanceRecord>>> = _attendanceMap.asStateFlow()
 
     private val _themeMode = MutableStateFlow(AppThemeMode.SYSTEM)
     val themeMode: StateFlow<AppThemeMode> = _themeMode.asStateFlow()
@@ -56,7 +56,6 @@ class MadrasaRepository(private val context: Context) {
     }
 
     private fun loadData() {
-        // Start completely empty as requested by user
         val teachersJson = prefs.getString(KEY_TEACHERS, null)
         val studentsJson = prefs.getString(KEY_STUDENTS, null)
 
@@ -85,22 +84,29 @@ class MadrasaRepository(private val context: Context) {
         val json = prefs.getString(KEY_ATTENDANCE, null) ?: return
         try {
             val root = JSONObject(json)
-            val map = mutableMapOf<String, Map<String, AttendanceStatus>>()
+            val map = mutableMapOf<String, Map<String, AttendanceRecord>>()
             val keys = root.keys()
             while (keys.hasNext()) {
                 val date = keys.next()
                 val dateObj = root.getJSONObject(date)
-                val innerMap = mutableMapOf<String, AttendanceStatus>()
+                val innerMap = mutableMapOf<String, AttendanceRecord>()
                 val studentKeys = dateObj.keys()
                 while (studentKeys.hasNext()) {
                     val sId = studentKeys.next()
-                    val statusStr = dateObj.getString(sId)
+                    val recObj = dateObj.getJSONObject(sId)
                     val status = try {
-                        AttendanceStatus.valueOf(statusStr)
+                        AttendanceStatus.valueOf(recObj.optString("status", AttendanceStatus.UNMARKED.name))
                     } catch (e: Exception) {
                         AttendanceStatus.UNMARKED
                     }
-                    innerMap[sId] = status
+                    innerMap[sId] = AttendanceRecord(
+                        studentId = sId,
+                        date = date,
+                        dayName = recObj.optString("dayName", ""),
+                        time = recObj.optString("time", ""),
+                        status = status,
+                        leaveReason = recObj.optString("leaveReason", "")
+                    )
                 }
                 map[date] = innerMap
             }
@@ -128,10 +134,13 @@ class MadrasaRepository(private val context: Context) {
                 put("id", s.id)
                 put("name", s.name)
                 put("fatherName", s.fatherName)
-                put("teacherId", s.teacherId)
                 put("phone", s.phone)
+                put("teacherId", s.teacherId)
                 put("address", s.address)
                 put("age", s.age)
+                put("feeAmount", s.feeAmount)
+                put("feePaidDate", s.feePaidDate)
+                put("isFeePaid", s.isFeePaid)
             }
             sArray.put(obj)
         }
@@ -146,8 +155,14 @@ class MadrasaRepository(private val context: Context) {
         val root = JSONObject()
         for ((date, studentMap) in _attendanceMap.value) {
             val dateObj = JSONObject()
-            for ((studentId, status) in studentMap) {
-                dateObj.put(studentId, status.name)
+            for ((studentId, record) in studentMap) {
+                val rObj = JSONObject().apply {
+                    put("status", record.status.name)
+                    put("dayName", record.dayName)
+                    put("time", record.time)
+                    put("leaveReason", record.leaveReason)
+                }
+                dateObj.put(studentId, rObj)
             }
             root.put(date, dateObj)
         }
@@ -181,10 +196,13 @@ class MadrasaRepository(private val context: Context) {
                     id = obj.optString("id", ""),
                     name = obj.optString("name", ""),
                     fatherName = obj.optString("fatherName", ""),
-                    teacherId = obj.optString("teacherId", ""),
                     phone = obj.optString("phone", ""),
+                    teacherId = obj.optString("teacherId", ""),
                     address = obj.optString("address", ""),
-                    age = obj.optString("age", "")
+                    age = obj.optString("age", ""),
+                    feeAmount = obj.optString("feeAmount", ""),
+                    feePaidDate = obj.optString("feePaidDate", ""),
+                    isFeePaid = obj.optBoolean("isFeePaid", false)
                 )
             )
         }
@@ -226,29 +244,58 @@ class MadrasaRepository(private val context: Context) {
         saveData()
     }
 
+    fun updateStudentFee(studentId: String, isPaid: Boolean, paidDate: String, amount: String) {
+        _students.value = _students.value.map {
+            if (it.id == studentId) {
+                it.copy(
+                    isFeePaid = isPaid,
+                    feePaidDate = if (isPaid) paidDate else "",
+                    feeAmount = if (amount.isNotBlank()) amount else it.feeAmount
+                )
+            } else it
+        }
+        saveData()
+    }
+
     fun getStudentsForTeacher(teacherId: String): List<Student> {
         return _students.value.filter { it.teacherId == teacherId }
     }
 
-    // Attendance
-    fun setStudentAttendance(date: String, studentId: String, status: AttendanceStatus) {
+    // Attendance Operations with Auto-Save
+    fun setAttendanceRecord(record: AttendanceRecord) {
+        val currentAll = _attendanceMap.value.toMutableMap()
+        val currentForDate = currentAll[record.date]?.toMutableMap() ?: mutableMapOf()
+        currentForDate[record.studentId] = record
+        currentAll[record.date] = currentForDate
+        _attendanceMap.value = currentAll
+        saveAttendanceData()
+    }
+
+    fun markAllPresentForDate(date: String, dayName: String, time: String, studentIds: List<String>) {
         val currentAll = _attendanceMap.value.toMutableMap()
         val currentForDate = currentAll[date]?.toMutableMap() ?: mutableMapOf()
-        currentForDate[studentId] = status
+        studentIds.forEach { id ->
+            currentForDate[id] = AttendanceRecord(
+                studentId = id,
+                date = date,
+                dayName = dayName,
+                time = time,
+                status = AttendanceStatus.PRESENT
+            )
+        }
         currentAll[date] = currentForDate
         _attendanceMap.value = currentAll
         saveAttendanceData()
     }
 
-    fun markAllPresentForDate(date: String, studentIds: List<String>) {
-        val currentAll = _attendanceMap.value.toMutableMap()
-        val currentForDate = currentAll[date]?.toMutableMap() ?: mutableMapOf()
-        studentIds.forEach { id ->
-            currentForDate[id] = AttendanceStatus.PRESENT
+    // Student Attendance History (Timeline)
+    fun getStudentAttendanceHistory(studentId: String): List<AttendanceRecord> {
+        val list = mutableListOf<AttendanceRecord>()
+        for ((_, studentMap) in _attendanceMap.value) {
+            studentMap[studentId]?.let { list.add(it) }
         }
-        currentAll[date] = currentForDate
-        _attendanceMap.value = currentAll
-        saveAttendanceData()
+        // sort by date descending
+        return list.sortedByDescending { it.date }
     }
 
     // Settings
@@ -271,9 +318,9 @@ class MadrasaRepository(private val context: Context) {
     }
 
     companion object {
-        private const val KEY_TEACHERS = "key_teachers_data_v2"
-        private const val KEY_STUDENTS = "key_students_data_v2"
-        private const val KEY_ATTENDANCE = "key_attendance_data_v2"
+        private const val KEY_TEACHERS = "key_teachers_data_v3"
+        private const val KEY_STUDENTS = "key_students_data_v3"
+        private const val KEY_ATTENDANCE = "key_attendance_data_v3"
         private const val KEY_THEME_MODE = "key_theme_mode"
         private const val KEY_LANGUAGE = "key_language"
     }

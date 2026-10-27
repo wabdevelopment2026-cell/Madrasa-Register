@@ -1,5 +1,6 @@
 package com.example.ui.screens
 
+import android.content.Context
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -20,22 +21,21 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AccessTime
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.ChevronLeft
 import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.DoneAll
 import androidx.compose.material.icons.filled.EventBusy
+import androidx.compose.material.icons.filled.Paid
 import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.filled.School
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Today
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.FilledTonalButton
@@ -43,7 +43,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -54,10 +53,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.model.AttendanceRecord
 import com.example.data.model.AttendanceStatus
 import com.example.data.model.Student
 import com.example.ui.viewmodel.MadrasaViewModel
@@ -68,15 +69,17 @@ fun AttendanceScreen(
     viewModel: MadrasaViewModel,
     modifier: Modifier = Modifier
 ) {
+    val context = LocalContext.current
     val language by viewModel.language.collectAsState()
     val selectedDate by viewModel.selectedDate.collectAsState()
     val allStudents by viewModel.allStudents.collectAsState()
     val allTeachers by viewModel.allTeachers.collectAsState()
     val attendanceStudents by viewModel.attendanceStudents.collectAsState()
-    val attendanceMap by viewModel.attendanceMap.collectAsState()
     val searchQuery by viewModel.attendanceSearchQuery.collectAsState()
     val teacherFilter by viewModel.attendanceTeacherFilter.collectAsState()
 
+    val dayName = viewModel.getDayNameForDate(selectedDate)
+    val currentTime = viewModel.getCurrentTimeString()
     val summary = viewModel.getAttendanceSummary(selectedDate)
 
     Column(
@@ -84,69 +87,102 @@ fun AttendanceScreen(
             .fillMaxSize()
             .testTag("attendance_screen")
     ) {
-        // Date Selector Bar
+        // Date Selector Bar with Calendar Pop-up Trigger
         Surface(
             tonalElevation = 2.dp,
             color = MaterialTheme.colorScheme.surface,
             modifier = Modifier.fillMaxWidth()
         ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 12.dp, vertical = 8.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                IconButton(
-                    onClick = { viewModel.goToPreviousDay() },
-                    modifier = Modifier.testTag("attendance_prev_day")
+            Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Previous Day")
+                    IconButton(
+                        onClick = { viewModel.goToPreviousDay() },
+                        modifier = Modifier.testTag("attendance_prev_day")
+                    ) {
+                        Icon(imageVector = Icons.Default.ChevronLeft, contentDescription = "Previous Day")
+                    }
+
+                    // Tappable Calendar Pop-up Box
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                        modifier = Modifier
+                            .clickable { viewModel.openDatePicker(context) }
+                            .testTag("calendar_popup_button")
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CalendarMonth,
+                                contentDescription = "Pick Date from Calendar",
+                                tint = MaterialTheme.colorScheme.primary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                Text(
+                                    text = "$dayName, $selectedDate",
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                                Text(
+                                    text = "Tap to open Calendar (کیلنڈر پاپ اپ)",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                                    fontSize = 10.sp
+                                )
+                            }
+                        }
+                    }
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        IconButton(
+                            onClick = { viewModel.goToNextDay() },
+                            modifier = Modifier.testTag("attendance_next_day")
+                        ) {
+                            Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Next Day")
+                        }
+
+                        FilledTonalButton(
+                            onClick = { viewModel.goToToday() },
+                            contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
+                            modifier = Modifier.testTag("attendance_today_button")
+                        ) {
+                            Icon(imageVector = Icons.Default.Today, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("Today", style = MaterialTheme.typography.labelMedium)
+                        }
+                    }
                 }
 
+                // Auto-selected Live Time & Auto-Save Banner
                 Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.clickable { viewModel.goToToday() }
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 4.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.CalendarMonth,
+                        imageVector = Icons.Default.AccessTime,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                        modifier = Modifier.size(20.dp)
+                        tint = MaterialTheme.colorScheme.outline,
+                        modifier = Modifier.size(14.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Text(
-                            text = selectedDate,
-                            style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Text(
-                            text = AppStrings.date(language),
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.outline
-                        )
-                    }
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(
-                        onClick = { viewModel.goToNextDay() },
-                        modifier = Modifier.testTag("attendance_next_day")
-                    ) {
-                        Icon(imageVector = Icons.Default.ChevronRight, contentDescription = "Next Day")
-                    }
-
-                    FilledTonalButton(
-                        onClick = { viewModel.goToToday() },
-                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 4.dp),
-                        modifier = Modifier.testTag("attendance_today_button")
-                    ) {
-                        Icon(imageVector = Icons.Default.Today, contentDescription = null, modifier = Modifier.size(16.dp))
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(AppStrings.today(language), style = MaterialTheme.typography.labelMedium)
-                    }
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = "Time: $currentTime • Auto-Saved to device instantly (خود بخود محفوظ)",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.outline,
+                        fontSize = 11.sp
+                    )
                 }
             }
         }
@@ -188,7 +224,7 @@ fun AttendanceScreen(
             )
         }
 
-        // Search and Quick Actions Bar
+        // Search & Teacher Filter Bar
         Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp)) {
             Row(
                 modifier = Modifier.fillMaxWidth(),
@@ -226,14 +262,14 @@ fun AttendanceScreen(
                     ) {
                         Icon(imageVector = Icons.Default.DoneAll, contentDescription = null, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(4.dp))
-                        Text(AppStrings.markAllPresent(language), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Mark All Present", fontSize = 12.sp, fontWeight = FontWeight.Bold)
                     }
                 }
             }
 
-            // Teacher Filter Chips
+            // Teacher filter chips
             if (allTeachers.isNotEmpty()) {
-                Spacer(modifier = Modifier.height(8.dp))
+                Spacer(modifier = Modifier.height(6.dp))
                 LazyRow(
                     horizontalArrangement = Arrangement.spacedBy(6.dp),
                     contentPadding = PaddingValues(vertical = 2.dp)
@@ -327,14 +363,171 @@ fun AttendanceScreen(
                 modifier = Modifier.fillMaxSize()
             ) {
                 items(attendanceStudents, key = { it.id }) { student ->
-                    val status = viewModel.getStudentAttendanceStatus(selectedDate, student.id)
+                    val record = viewModel.getStudentAttendanceRecord(selectedDate, student.id)
                     StudentAttendanceRowCard(
                         student = student,
+                        record = record,
                         teacherName = viewModel.getTeacherName(student.teacherId),
-                        status = status,
-                        onSelectStatus = { newStatus ->
-                            viewModel.markAttendance(student.id, newStatus)
+                        onOpenDetails = { viewModel.openStudentDetails(student) },
+                        onSelectPresent = { viewModel.markAttendance(student.id, AttendanceStatus.PRESENT) },
+                        onSelectAbsent = { viewModel.markAttendance(student.id, AttendanceStatus.ABSENT) },
+                        onSelectLeave = { viewModel.openLeaveReasonDialog(student) }
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun StudentAttendanceRowCard(
+    student: Student,
+    record: AttendanceRecord?,
+    teacherName: String,
+    onOpenDetails: () -> Unit,
+    onSelectPresent: () -> Unit,
+    onSelectAbsent: () -> Unit,
+    onSelectLeave: () -> Unit
+) {
+    val status = record?.status ?: AttendanceStatus.UNMARKED
+
+    ElevatedCard(
+        onClick = onOpenDetails,
+        shape = RoundedCornerShape(14.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surface
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+        modifier = Modifier.fillMaxWidth()
+    ) {
+        Column(modifier = Modifier.padding(12.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Student info
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .clip(CircleShape)
+                            .background(
+                                when (status) {
+                                    AttendanceStatus.PRESENT -> Color(0xFFDCFCE7)
+                                    AttendanceStatus.ABSENT -> Color(0xFFFEE2E2)
+                                    AttendanceStatus.LEAVE -> Color(0xFFFEF3C7)
+                                    AttendanceStatus.UNMARKED -> MaterialTheme.colorScheme.surfaceVariant
+                                }
+                            )
+                    ) {
+                        Icon(
+                            imageVector = when (status) {
+                                AttendanceStatus.PRESENT -> Icons.Default.Check
+                                AttendanceStatus.ABSENT -> Icons.Default.Clear
+                                AttendanceStatus.LEAVE -> Icons.Default.EventBusy
+                                AttendanceStatus.UNMARKED -> Icons.Default.Person
+                            },
+                            contentDescription = null,
+                            tint = when (status) {
+                                AttendanceStatus.PRESENT -> Color(0xFF16A34A)
+                                AttendanceStatus.ABSENT -> Color(0xFFDC2626)
+                                AttendanceStatus.LEAVE -> Color(0xFFD97706)
+                                AttendanceStatus.UNMARKED -> MaterialTheme.colorScheme.outline
+                            },
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(10.dp))
+
+                    Column {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = student.name,
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (student.isFeePaid) {
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Surface(
+                                    shape = RoundedCornerShape(6.dp),
+                                    color = Color(0xFFDCFCE7)
+                                ) {
+                                    Text(
+                                        text = "Fees Paid",
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF16A34A),
+                                        modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp)
+                                    )
+                                }
+                            }
                         }
+                        Text(
+                            text = "Walid: ${student.fatherName} • $teacherName",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            fontSize = 11.sp,
+                            maxLines = 1
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // 3 Status Action Buttons: Present, Absent, Leave
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    // Present
+                    AttendanceButton(
+                        label = "P",
+                        tooltip = "Present",
+                        isSelected = status == AttendanceStatus.PRESENT,
+                        selectedColor = Color(0xFF16A34A),
+                        selectedTextColor = Color.White,
+                        onClick = onSelectPresent
+                    )
+
+                    // Absent
+                    AttendanceButton(
+                        label = "A",
+                        tooltip = "Absent",
+                        isSelected = status == AttendanceStatus.ABSENT,
+                        selectedColor = Color(0xFFDC2626),
+                        selectedTextColor = Color.White,
+                        onClick = onSelectAbsent
+                    )
+
+                    // Leave (opens Leave Reason pop-up)
+                    AttendanceButton(
+                        label = "L",
+                        tooltip = "Leave (رخصت)",
+                        isSelected = status == AttendanceStatus.LEAVE,
+                        selectedColor = Color(0xFFD97706),
+                        selectedTextColor = Color.White,
+                        onClick = onSelectLeave
+                    )
+                }
+            }
+
+            // If Leave Reason exists, show it under student row
+            if (status == AttendanceStatus.LEAVE && !record?.leaveReason.isNullOrBlank()) {
+                Spacer(modifier = Modifier.height(6.dp))
+                Surface(
+                    shape = RoundedCornerShape(8.dp),
+                    color = Color(0xFFFEF3C7).copy(alpha = 0.8f),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = "Wajah (Reason): ${record?.leaveReason}",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = Color(0xFFB45309),
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                     )
                 }
             }
@@ -376,121 +569,6 @@ fun AttendanceStatPill(
 }
 
 @Composable
-fun StudentAttendanceRowCard(
-    student: Student,
-    teacherName: String,
-    status: AttendanceStatus,
-    onSelectStatus: (AttendanceStatus) -> Unit
-) {
-    ElevatedCard(
-        shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.elevatedCardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        ),
-        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Student Info
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.weight(1f)
-            ) {
-                Box(
-                    contentAlignment = Alignment.Center,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .clip(CircleShape)
-                        .background(
-                            when (status) {
-                                AttendanceStatus.PRESENT -> Color(0xFFDCFCE7)
-                                AttendanceStatus.ABSENT -> Color(0xFFFEE2E2)
-                                AttendanceStatus.LEAVE -> Color(0xFFFEF3C7)
-                                AttendanceStatus.UNMARKED -> MaterialTheme.colorScheme.surfaceVariant
-                            }
-                        )
-                ) {
-                    Icon(
-                        imageVector = when (status) {
-                            AttendanceStatus.PRESENT -> Icons.Default.Check
-                            AttendanceStatus.ABSENT -> Icons.Default.Clear
-                            AttendanceStatus.LEAVE -> Icons.Default.EventBusy
-                            AttendanceStatus.UNMARKED -> Icons.Default.Person
-                        },
-                        contentDescription = null,
-                        tint = when (status) {
-                            AttendanceStatus.PRESENT -> Color(0xFF16A34A)
-                            AttendanceStatus.ABSENT -> Color(0xFFDC2626)
-                            AttendanceStatus.LEAVE -> Color(0xFFD97706)
-                            AttendanceStatus.UNMARKED -> MaterialTheme.colorScheme.outline
-                        },
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Spacer(modifier = Modifier.width(10.dp))
-
-                Column {
-                    Text(
-                        text = student.name,
-                        style = MaterialTheme.typography.titleSmall,
-                        fontWeight = FontWeight.Bold
-                    )
-                    Text(
-                        text = "Walid: ${student.fatherName.ifBlank { "N/A" }} | $teacherName",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        fontSize = 11.sp,
-                        maxLines = 1
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // 3-way status toggle: Present, Absent, Leave
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                // Present Button
-                AttendanceButton(
-                    label = "P",
-                    tooltip = "Present",
-                    isSelected = status == AttendanceStatus.PRESENT,
-                    selectedColor = Color(0xFF16A34A),
-                    selectedTextColor = Color.White,
-                    onClick = { onSelectStatus(AttendanceStatus.PRESENT) }
-                )
-
-                // Absent Button
-                AttendanceButton(
-                    label = "A",
-                    tooltip = "Absent",
-                    isSelected = status == AttendanceStatus.ABSENT,
-                    selectedColor = Color(0xFFDC2626),
-                    selectedTextColor = Color.White,
-                    onClick = { onSelectStatus(AttendanceStatus.ABSENT) }
-                )
-
-                // Leave Button
-                AttendanceButton(
-                    label = "L",
-                    tooltip = "Leave",
-                    isSelected = status == AttendanceStatus.LEAVE,
-                    selectedColor = Color(0xFFD97706),
-                    selectedTextColor = Color.White,
-                    onClick = { onSelectStatus(AttendanceStatus.LEAVE) }
-                )
-            }
-        }
-    }
-}
-
-@Composable
 fun AttendanceButton(
     label: String,
     tooltip: String,
@@ -515,3 +593,4 @@ fun AttendanceButton(
         )
     }
 }
+

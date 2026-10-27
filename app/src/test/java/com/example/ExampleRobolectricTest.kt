@@ -21,7 +21,7 @@ class ExampleRobolectricTest {
     fun `read string from context`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val appName = context.getString(R.string.app_name)
-        assertEquals("Madrasa", appName)
+        assertEquals("Madrasa Register", appName)
     }
 
     @Test
@@ -57,9 +57,16 @@ class ExampleRobolectricTest {
 
         // Test attendance
         val testDate = "2026-10-27"
-        repository.setStudentAttendance(testDate, newStudent.id, AttendanceStatus.PRESENT)
+        val record = com.example.data.model.AttendanceRecord(
+            studentId = newStudent.id,
+            date = testDate,
+            dayName = "Tuesday",
+            time = "10:00 AM",
+            status = AttendanceStatus.PRESENT
+        )
+        repository.setAttendanceRecord(record)
 
         val attendance = repository.attendanceMap.value[testDate]
-        assertEquals(AttendanceStatus.PRESENT, attendance?.get(newStudent.id))
+        assertEquals(AttendanceStatus.PRESENT, attendance?.get(newStudent.id)?.status)
     }
 }

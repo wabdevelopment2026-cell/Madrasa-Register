@@ -5,8 +5,8 @@ import com.example.data.model.AppLanguage
 object AppStrings {
 
     fun appTitle(lang: AppLanguage) = when (lang) {
-        AppLanguage.ENGLISH -> "Madrasa App"
-        AppLanguage.URDU -> "مدرسہ ایپ"
+        AppLanguage.ENGLISH -> "Madrasa Register"
+        AppLanguage.URDU -> "مدرسہ رجسٹر"
     }
 
     fun home(lang: AppLanguage) = when (lang) {

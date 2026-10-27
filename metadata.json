@@ -1,6 +1,6 @@
 {
-  "name": "Madrasa",
-  "description": "Simple madrasa data management app for students (Bachay) and teachers (Qari Sahab)",
+  "name": "Madrasa Register",
+  "description": "Madrasa Register app for student & teacher management, attendance tracking, and fee records",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

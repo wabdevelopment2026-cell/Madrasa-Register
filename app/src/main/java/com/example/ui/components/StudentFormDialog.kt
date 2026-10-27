@@ -8,8 +8,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CalendarToday
-import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Payments
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.School
@@ -47,27 +46,19 @@ fun StudentFormDialog(
     onSave: (
         name: String,
         fatherName: String,
-        teacherId: String,
         phone: String,
-        address: String,
-        age: String
+        teacherId: String,
+        feeAmount: String
     ) -> Unit
 ) {
     var name by remember { mutableStateOf(initialStudent?.name ?: "") }
     var fatherName by remember { mutableStateOf(initialStudent?.fatherName ?: "") }
-    var selectedTeacherId by remember {
-        mutableStateOf(
-            initialStudent?.teacherId ?: teachersList.firstOrNull()?.id.orEmpty()
-        )
-    }
     var phone by remember { mutableStateOf(initialStudent?.phone ?: "") }
-    var address by remember { mutableStateOf(initialStudent?.address ?: "") }
-    var age by remember { mutableStateOf(initialStudent?.age ?: "") }
+    var selectedTeacherId by remember { mutableStateOf(initialStudent?.teacherId ?: "") }
+    var feeAmount by remember { mutableStateOf(initialStudent?.feeAmount ?: "1000") }
 
     var nameError by remember { mutableStateOf(false) }
     var fatherNameError by remember { mutableStateOf(false) }
-    var teacherError by remember { mutableStateOf(false) }
-
     var isDropdownExpanded by remember { mutableStateOf(false) }
 
     val isEditing = initialStudent != null
@@ -77,7 +68,7 @@ fun StudentFormDialog(
         onDismissRequest = onDismiss,
         title = {
             Text(
-                text = if (isEditing) "Edit Student (Bachay ki Maloomat)" else "Add Student (Naya Bacha)",
+                text = if (isEditing) "Edit Student (طالب علم میں ترمیم)" else "Add Student (نیا طالب علم)",
                 style = MaterialTheme.typography.titleMedium
             )
         },
@@ -87,14 +78,14 @@ fun StudentFormDialog(
                     .fillMaxWidth()
                     .verticalScroll(rememberScrollState())
             ) {
-                // Bachay ka Naam (required)
+                // 1. Bachay ka Naam (required)
                 OutlinedTextField(
                     value = name,
                     onValueChange = {
                         name = it
                         if (it.isNotBlank()) nameError = false
                     },
-                    label = { Text("Student Name (Bachay ka Naam) *") },
+                    label = { Text("Bachay ka Naam (Student Name) *") },
                     placeholder = { Text("e.g. Muhammad Ahmed") },
                     leadingIcon = {
                         Icon(imageVector = Icons.Default.Person, contentDescription = "Student Name")
@@ -102,7 +93,7 @@ fun StudentFormDialog(
                     isError = nameError,
                     supportingText = {
                         if (nameError) {
-                            Text("Student name is required", color = MaterialTheme.colorScheme.error)
+                            Text("Name is required", color = MaterialTheme.colorScheme.error)
                         }
                     },
                     singleLine = true,
@@ -114,14 +105,14 @@ fun StudentFormDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Walid ka Naam (required)
+                // 2. Walid ka Naam (required)
                 OutlinedTextField(
                     value = fatherName,
                     onValueChange = {
                         fatherName = it
                         if (it.isNotBlank()) fatherNameError = false
                     },
-                    label = { Text("Father's Name (Walid ka Naam) *") },
+                    label = { Text("Walid ka Naam (Father's Name) *") },
                     placeholder = { Text("e.g. Muhammad Bilal") },
                     leadingIcon = {
                         Icon(imageVector = Icons.Default.Person, contentDescription = "Father Name")
@@ -141,62 +132,12 @@ fun StudentFormDialog(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // Qari Sahab Dropdown (required)
-                ExposedDropdownMenuBox(
-                    expanded = isDropdownExpanded,
-                    onExpandedChange = { isDropdownExpanded = !isDropdownExpanded },
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    OutlinedTextField(
-                        value = selectedTeacher?.name ?: if (teachersList.isEmpty()) "No teacher available (Add teacher first)" else "Select Qari Sahab",
-                        onValueChange = {},
-                        readOnly = true,
-                        label = { Text("Qari Sahab (Teacher) *") },
-                        leadingIcon = {
-                            Icon(imageVector = Icons.Default.School, contentDescription = "Qari Sahab")
-                        },
-                        trailingIcon = {
-                            ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded)
-                        },
-                        isError = teacherError,
-                        supportingText = {
-                            if (teacherError) {
-                                Text("Selecting a teacher is required", color = MaterialTheme.colorScheme.error)
-                            } else if (teachersList.isEmpty()) {
-                                Text("Please add a teacher first in Teachers tab", color = MaterialTheme.colorScheme.error)
-                            }
-                        },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .menuAnchor(MenuAnchorType.PrimaryNotEditable)
-                            .testTag("student_teacher_dropdown")
-                    )
-
-                    ExposedDropdownMenu(
-                        expanded = isDropdownExpanded,
-                        onDismissRequest = { isDropdownExpanded = false }
-                    ) {
-                        teachersList.forEach { teacher ->
-                            DropdownMenuItem(
-                                text = { Text(teacher.name) },
-                                onClick = {
-                                    selectedTeacherId = teacher.id
-                                    teacherError = false
-                                    isDropdownExpanded = false
-                                }
-                            )
-                        }
-                    }
-                }
-
-                Spacer(modifier = Modifier.height(8.dp))
-
-                // Walid ka Number
+                // 3. Walid ka Mobile Number
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it },
-                    label = { Text("Father's Phone (Walid ka Number)") },
-                    placeholder = { Text("03011112233") },
+                    label = { Text("Walid ka Mobile Number (Phone)") },
+                    placeholder = { Text("03001234567") },
                     leadingIcon = {
                         Icon(imageVector = Icons.Default.Phone, contentDescription = "Father Phone")
                     },
@@ -210,43 +151,73 @@ fun StudentFormDialog(
                         .testTag("student_phone_input")
                 )
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
-                // Umar (Age)
+                // Optional Teacher Selector (if teachers exist)
+                if (teachersList.isNotEmpty()) {
+                    ExposedDropdownMenuBox(
+                        expanded = isDropdownExpanded,
+                        onExpandedChange = { isDropdownExpanded = !isDropdownExpanded },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        OutlinedTextField(
+                            value = selectedTeacher?.name ?: "No Teacher Assigned (Optional)",
+                            onValueChange = {},
+                            readOnly = true,
+                            label = { Text("Qari Sahab / Teacher (Optional)") },
+                            leadingIcon = {
+                                Icon(imageVector = Icons.Default.School, contentDescription = null)
+                            },
+                            trailingIcon = {
+                                ExposedDropdownMenuDefaults.TrailingIcon(expanded = isDropdownExpanded)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        )
+
+                        ExposedDropdownMenu(
+                            expanded = isDropdownExpanded,
+                            onDismissRequest = { isDropdownExpanded = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("None (Unassigned)") },
+                                onClick = {
+                                    selectedTeacherId = ""
+                                    isDropdownExpanded = false
+                                }
+                            )
+                            teachersList.forEach { teacher ->
+                                DropdownMenuItem(
+                                    text = { Text(teacher.name) },
+                                    onClick = {
+                                        selectedTeacherId = teacher.id
+                                        isDropdownExpanded = false
+                                    }
+                                )
+                            }
+                        }
+                    }
+                    Spacer(modifier = Modifier.height(10.dp))
+                }
+
+                // Optional Monthly Fee
                 OutlinedTextField(
-                    value = age,
-                    onValueChange = { age = it },
-                    label = { Text("Age in Years (Umar)") },
-                    placeholder = { Text("e.g. 12") },
+                    value = feeAmount,
+                    onValueChange = { feeAmount = it },
+                    label = { Text("Monthly Fee / Mahana Fees (Optional)") },
+                    placeholder = { Text("e.g. 1000") },
                     leadingIcon = {
-                        Icon(imageVector = Icons.Default.CalendarToday, contentDescription = "Age")
+                        Icon(imageVector = Icons.Default.Payments, contentDescription = null)
                     },
                     singleLine = true,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
-                        imeAction = ImeAction.Next
+                        imeAction = ImeAction.Done
                     ),
                     modifier = Modifier
                         .fillMaxWidth()
-                        .testTag("student_age_input")
-                )
-
-                Spacer(modifier = Modifier.height(12.dp))
-
-                // Address
-                OutlinedTextField(
-                    value = address,
-                    onValueChange = { address = it },
-                    label = { Text("Address / Mohalla") },
-                    placeholder = { Text("House / Street / City") },
-                    leadingIcon = {
-                        Icon(imageVector = Icons.Default.Home, contentDescription = "Address")
-                    },
-                    maxLines = 2,
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("student_address_input")
+                        .testTag("student_fee_input")
                 )
             }
         },
@@ -262,13 +233,9 @@ fun StudentFormDialog(
                         fatherNameError = true
                         hasError = true
                     }
-                    if (selectedTeacherId.isBlank()) {
-                        teacherError = true
-                        hasError = true
-                    }
 
                     if (!hasError) {
-                        onSave(name, fatherName, selectedTeacherId, phone, address, age)
+                        onSave(name, fatherName, phone, selectedTeacherId, feeAmount)
                     }
                 },
                 modifier = Modifier.testTag("student_save_button")
